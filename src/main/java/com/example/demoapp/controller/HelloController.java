@@ -20,7 +20,7 @@ public class HelloController {
 
     @GetMapping("/health")
     public String health() {
-        return "Application is healthy and running and from github SCM.";
+        return "Application is healthy and running and from github SCM  .";
     }
 
     @GetMapping("/version")
