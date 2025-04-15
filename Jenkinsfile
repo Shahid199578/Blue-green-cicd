@@ -63,7 +63,7 @@ pipeline {
         }
         stage('Deploy to EKS'){
             steps {
-                """
+                sh """
                 aws eks --region $AWS_REGION update-kubeconfig --name $CLUSTER_NAME
                 sed 's|dockerimage|${IMAGE}:${VERSION}|' k8s/green-deployment.yaml | kubectl apply -f -
                 """
