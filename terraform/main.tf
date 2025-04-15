@@ -4,6 +4,7 @@ provider "aws" {
 
 data "aws_availability_zones" "available" {}
 
+# Create VPC
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
@@ -13,7 +14,7 @@ resource "aws_vpc" "main" {
   }
 }
 
-#public subnet
+# Public Subnets
 resource "aws_subnet" "public" {
   count                   = length(var.public_subnet_cidrs)
   vpc_id                  = aws_vpc.main.id
@@ -25,22 +26,18 @@ resource "aws_subnet" "public" {
   }
 }
 
-
-#private subnet
-
-
+# Private Subnets
 resource "aws_subnet" "private" {
   count             = length(var.private_subnet_cidrs)
   vpc_id            = aws_vpc.main.id
   cidr_block        = var.private_subnet_cidrs[count.index]
   availability_zone = data.aws_availability_zones.available.names[count.index]
   tags = {
-    Name = "${var.cluster_name}-public-${count.index + 1}"
+    Name = "${var.cluster_name}-private-${count.index + 1}"
   }
 }
 
-#internet Gateway
-
+# Internet Gateway
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
   tags = {
@@ -48,8 +45,7 @@ resource "aws_internet_gateway" "igw" {
   }
 }
 
-#Pulic Route table
-
+# Public Route Table
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
   route {
@@ -61,22 +57,19 @@ resource "aws_route_table" "public" {
   }
 }
 
-#Associate Public subnet to Route table
+# Associate Public Subnets to Route Table
 resource "aws_route_table_association" "public_assoc" {
   count          = length(var.public_subnet_cidrs)
   subnet_id      = aws_subnet.public[count.index].id
   route_table_id = aws_route_table.public.id
 }
 
-
-#Elastic IP for NAT Gateway
-
+# Elastic IP for NAT Gateway
 resource "aws_eip" "nat" {
   domain = "vpc"
 }
 
-#NAT Gateway
-
+# NAT Gateway
 resource "aws_nat_gateway" "nat" {
   allocation_id = aws_eip.nat.id
   subnet_id     = aws_subnet.public[0].id
@@ -85,9 +78,7 @@ resource "aws_nat_gateway" "nat" {
   }
 }
 
-#Priavte Route Table with NAT gateway
-
-
+# Private Route Table with NAT Gateway
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
   route {
@@ -99,18 +90,16 @@ resource "aws_route_table" "private" {
   }
 }
 
-#Associate private subnet to route table
-
+# Associate Private Subnets to Route Table
 resource "aws_route_table_association" "private_assoc" {
   count          = length(var.private_subnet_cidrs)
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private.id
 }
-
-#IAM role for EKS cluster
-
+ 
+# IAM Role for EKS Cluster
 resource "aws_iam_role" "eks_cluster_role" {
-  name = "${var.cluster_name}-eks_cluster_role"
+  name = "${var.cluster_name}-eks-cluster-role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
     Statement = [{
@@ -128,11 +117,7 @@ resource "aws_iam_role_policy_attachment" "eks_cluster_AmazonEKSClusterPolicy" {
   role       = aws_iam_role.eks_cluster_role.name
 }
 
-
-
-# EKS cluster
-
-
+# EKS Cluster
 resource "aws_eks_cluster" "demo" {
   name     = var.cluster_name
   role_arn = aws_iam_role.eks_cluster_role.arn
@@ -147,9 +132,7 @@ resource "aws_eks_cluster" "demo" {
   ]
 }
 
-
-# IAM role for EKS nodes
-
+# IAM Role for EKS Nodes
 resource "aws_iam_role" "node_group_role" {
   name = "${var.cluster_name}-eks-nodegroup-role"
   assume_role_policy = jsonencode({
@@ -167,20 +150,17 @@ resource "aws_iam_role" "node_group_role" {
 resource "aws_iam_role_policy_attachment" "nodegroup_policies" {
   for_each = toset([
     "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
-    "arn:aws:iam::aws:policy/AmazonEC2ContainerResistryReadOnly",
+    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
     "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
   ])
-  role       = aws_iam_role.eks_cluster_role.name
+  role       = aws_iam_role.node_group_role.name
   policy_arn = each.value
 }
 
-
-#EKS Node Group
-
+# EKS Node Group
 resource "aws_eks_node_group" "node_group" {
-
   cluster_name    = aws_eks_cluster.demo.name
-  node_group_name = "$(var.cluster_name)-node-group"
+  node_group_name = "${var.cluster_name}-node-group"
   node_role_arn   = aws_iam_role.node_group_role.arn
   subnet_ids      = aws_subnet.private[*].id
   scaling_config {
@@ -189,6 +169,5 @@ resource "aws_eks_node_group" "node_group" {
     min_size     = 1
   }
   instance_types = [var.instance_type]
-  depends_on     = [aws_iam_role_policy_attachment.nodegroup_policies]
-
+  depends_on = [aws_iam_role_policy_attachment.nodegroup_policies]
 }
