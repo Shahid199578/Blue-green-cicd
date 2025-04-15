@@ -71,7 +71,7 @@ pipeline {
         }
         stage('Swithc Traffic to Green') {
             steps {
-                sh "kubcectl patch svc demoapp-service -p '{\"spec\":{\"selector\":{\"app\":\"demoapp\",\"version\":\"green\"}}}'"
+                sh "kubectl patch svc demoapp-service -p '{\"spec\":{\"selector\":{\"app\":\"demoapp\",\"version\":\"green\"}}}'"
             }
         }
 
